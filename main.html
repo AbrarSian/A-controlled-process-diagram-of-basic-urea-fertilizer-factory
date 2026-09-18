@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UREA·1 — Synthesis Train Process Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{
+    --bg:#0a1520;
+    --bg-2:#0d1c2b;
+    --panel:#11243599;
+    --panel-solid:#122436;
+    --panel-2:#173049;
+    --line:#26445f;
+    --line-soft:#1a3149;
+    --text:#e7edf2;
+    --text-dim:#8fa7bb;
+    --text-faint:#5c7385;
+    --amber:#e8a33d;
+    --green:#4fb286;
+    --cyan:#5fb2d6;
+    --red:#d9705f;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  body{
+    background-image:
+      linear-gradient(var(--line-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+    background-size: 42px 42px;
+    background-attachment: fixed;
+    background-color: var(--bg);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  ::selection{ background: var(--amber); color:#151515; }
+
+  /* ---------- NAV ---------- */
+  header{
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 20px;
+    background:rgba(10,21,32,0.92);
+    backdrop-filter: blur(6px);
+    border-bottom:1px solid var(--line);
+    gap:16px; flex-wrap:wrap;
+  }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand .mark{
+    font-family:var(--mono); font-weight:600; font-size:15px; letter-spacing:0.06em;
+    color:var(--amber); border:1px solid var(--amber); padding:3px 7px; border-radius:3px;
+  }
+  .brand .title{ font-weight:600; font-size:15px; }
+  .brand .sub{ font-family:var(--mono); font-size:11px; color:var(--text-faint); }
+
+  nav.tabs{ display:flex; gap:4px; background:var(--panel-solid); padding:4px; border-radius:8px; border:1px solid var(--line); }
+  nav.tabs button{
+    font-family:var(--sans); font-size:13px; font-weight:500; color:var(--text-dim);
+    background:transparent; border:none; padding:8px 16px; border-radius:6px; cursor:pointer;
+    transition: background .18s ease, color .18s ease;
+  }
+  nav.tabs button:hover{ color:var(--text); background:var(--panel-2); }
+  nav.tabs button.active{ background:var(--amber); color:#151b22; font-weight:600; }
+
+  main{ flex:1; width:100%; max-width:1240px; margin:0 auto; padding:22px 20px 60px; }
+  section.page{ display:none; animation: fade .25s ease; }
+  section.page.active{ display:block; }
+  @keyframes fade{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+
+  h1{ font-size:22px; margin:0 0 4px; font-weight:600; }
+  h2{ font-size:16px; margin:0 0 12px; font-weight:600; color:var(--text); }
+  p.lede{ color:var(--text-dim); font-size:13.5px; max-width:640px; line-height:1.55; margin:0 0 18px; }
+  .tagline{ font-family:var(--mono); font-size:11px; color:var(--text-faint); letter-spacing:.04em; margin-bottom:22px;}
+
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px 20px; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .grid3{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  @media(max-width:760px){ .grid2,.grid3{ grid-template-columns:1fr; } }
+
+  /* ---------- OVERVIEW / 3D ---------- */
+  .subtabs{ display:flex; gap:6px; margin-bottom:14px; }
+  .subtabs button{
+    font-family:var(--mono); font-size:11.5px; color:var(--text-dim); background:var(--panel-solid);
+    border:1px solid var(--line); padding:7px 13px; border-radius:6px; cursor:pointer;
+  }
+  .subtabs button.active{ border-color:var(--green); color:var(--green); background:#123326; }
+
+  #plant-canvas-wrap{
+    position:relative; width:100%; height:56vh; min-height:380px;
+    border:1px solid var(--line); border-radius:10px; overflow:hidden; background: radial-gradient(ellipse at 50% 20%, #0f2135, #081119 75%);
+  }
+  #plant-canvas-wrap canvas{ display:block; width:100%; height:100%; }
+  .canvas-hint{
+    position:absolute; bottom:10px; left:12px; font-family:var(--mono); font-size:10.5px; color:var(--text-faint);
+    background:rgba(10,20,30,.55); padding:4px 8px; border-radius:4px; pointer-events:none;
+  }
+  #equip-tooltip{
+    position:absolute; display:none; pointer-events:none; z-index:10;
+    background:var(--panel-solid); border:1px solid var(--amber); border-radius:6px; padding:8px 11px;
+    font-size:12px; max-width:220px; box-shadow:0 6px 18px rgba(0,0,0,.4);
+  }
+  #equip-tooltip .tt-tag{ font-family:var(--mono); color:var(--amber); font-size:11px; }
+  #equip-tooltip .tt-name{ font-weight:600; margin:2px 0; }
+  #equip-tooltip .tt-desc{ color:var(--text-dim); font-size:11.5px; line-height:1.4; }
+
+  .legend{ display:flex; gap:18px; flex-wrap:wrap; margin-top:12px; font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+  .legend span.dot{ display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:6px; vertical-align:middle; }
+
+  .section-info{ margin-top:16px; }
+  .section-info .eyebrow{ font-family:var(--mono); font-size:11px; color:var(--amber); margin-bottom:6px; }
+  .section-info h3{ margin:0 0 6px; font-size:15px; }
+  .section-info p{ color:var(--text-dim); font-size:13px; line-height:1.6; margin:0; max-width:680px; }
+
+  /* ---------- DIAGRAM ---------- */
+  #diagram-wrap{ overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:#0c1b29; }
+  #diagram-wrap svg{ display:block; min-width:1180px; }
+  .pid-box{ fill:#132a3f; stroke:#3a6088; stroke-width:1.3; }
+  .pid-box.feed{ stroke:var(--green); }
+  .pid-box.reaction{ stroke:var(--amber); }
+  .pid-box.finishing{ stroke:var(--cyan); }
+  .pid-tag{ font-family:var(--mono); font-size:11px; fill:var(--amber); font-weight:600; }
+  .pid-name{ font-family:var(--sans); font-size:10.5px; fill:var(--text); }
+  .pid-val{ font-family:var(--mono); font-size:9.5px; fill:var(--text-dim); }
+  .pid-stream{ font-family:var(--mono); font-size:9.5px; fill:var(--green); }
+  .pid-line{ stroke:#3a6088; stroke-width:1.6; fill:none; }
+  .pid-line.vapor{ stroke:var(--amber); stroke-dasharray:4 3; }
+  .pid-line.steam{ stroke:var(--cyan); }
+
+  /* ---------- CONTROLS ---------- */
+  .ctrl-row{ margin-bottom:20px; }
+  .ctrl-row label{ display:flex; justify-content:space-between; font-size:12.5px; color:var(--text-dim); margin-bottom:6px; }
+  .ctrl-row label .val{ font-family:var(--mono); color:var(--amber); font-weight:600; }
+  input[type=range]{
+    -webkit-appearance:none; width:100%; height:4px; border-radius:2px; background:var(--line);
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:15px; height:15px; border-radius:50%; background:var(--amber); cursor:pointer;
+    border:2px solid #151b22;
+  }
+  input[type=range]::-moz-range-thumb{ width:13px; height:13px; border-radius:50%; background:var(--amber); border:2px solid #151b22; cursor:pointer; }
+  .ctrl-note{ font-size:11px; color:var(--text-faint); margin-top:4px; }
+
+  .kpi-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:18px; }
+  @media(max-width:760px){ .kpi-grid{ grid-template-columns:repeat(2,1fr); } }
+  .kpi{ background:var(--panel-solid); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
+  .kpi .label{ font-family:var(--mono); font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.03em; }
+  .kpi .value{ font-family:var(--mono); font-size:20px; font-weight:600; margin-top:4px; color:var(--text); }
+  .kpi .unit{ font-size:11px; color:var(--text-dim); font-family:var(--sans); }
+
+  /* ---------- RESULTS ---------- */
+  .tour-step{ display:flex; gap:14px; padding:14px 0; border-bottom:1px solid var(--line-soft); }
+  .tour-step:last-child{ border-bottom:none; }
+  .tour-num{ font-family:var(--mono); color:var(--amber); font-size:13px; width:26px; flex:none; padding-top:2px; }
+  .tour-body h4{ margin:0 0 4px; font-size:13.5px; font-weight:600; }
+  .tour-body p{ margin:0; font-size:12.5px; color:var(--text-dim); line-height:1.6; }
+  .tour-body .tag-ref{ font-family:var(--mono); color:var(--green); font-size:11.5px; }
+
+  table{ width:100%; border-collapse:collapse; font-size:12px; }
+  th{ text-align:left; font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-faint); padding:8px 10px; border-bottom:1px solid var(--line); }
+  td{ padding:8px 10px; border-bottom:1px solid var(--line-soft); color:var(--text-dim); font-family:var(--mono); font-size:11.5px; }
+  td.name{ font-family:var(--sans); color:var(--text); }
+  tr:hover td{ background:rgba(255,255,255,.02); }
+
+  .assump-list{ margin:0; padding-left:18px; color:var(--text-dim); font-size:12.5px; line-height:1.8; }
+  .assump-list li::marker{ color:var(--amber); }
+
+  .tabgroup-title{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .badge{ font-family:var(--mono); font-size:10.5px; padding:3px 8px; border-radius:20px; border:1px solid var(--green); color:var(--green); }
+
+  footer{ text-align:center; padding:20px; font-family:var(--mono); font-size:10.5px; color:var(--text-faint); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="mark">UREA·1</span>
+    <span class="title">Synthesis Train Process Simulator</span>
+    <span class="sub">CO₂-stripping · total-recycle</span>
+  </div>
+  <nav class="tabs" id="mainTabs">
+    <button data-page="plant" class="active">Plant</button>
+    <button data-page="diagram">Diagram</button>
+    <button data-page="controls">Controls</button>
+    <button data-page="results">Results</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ================= PAGE 1: 3D PLANT ================= -->
+  <section class="page active" id="page-plant">
+    <h1>Plant model</h1>
+    <p class="tagline">Rotate: drag · Zoom: scroll · Click equipment for tag detail</p>
+
+    <div class="subtabs" id="plantSubtabs">
+      <button data-view="overview" class="active">Overview</button>
+      <button data-view="feed">Feed section</button>
+      <button data-view="process">Main process</button>
+    </div>
+
+    <div id="plant-canvas-wrap">
+      <div id="equip-tooltip"></div>
+      <div class="canvas-hint">drag to orbit · scroll to zoom</div>
+    </div>
+
+    <div class="legend">
+      <div><span class="dot" style="background:#4fb286"></span>Feed &amp; utilities</div>
+      <div><span class="dot" style="background:#e8a33d"></span>Synthesis &amp; recirculation</div>
+      <div><span class="dot" style="background:#5fb2d6"></span>Concentration &amp; finishing</div>
+    </div>
+
+    <div class="section-info" id="viewInfo">
+      <div class="eyebrow">OVERVIEW</div>
+      <h3>Full synthesis train</h3>
+      <p>A single CO₂-stripping urea train, laid out left to right in process order: ammonia and carbon dioxide feed, high-pressure synthesis loop, recirculation/decomposition, vacuum concentration, and prilling. Equipment is drawn to relative scale; use the section tabs above to jump the camera to feed or main-process equipment.</p>
+    </div>
+  </section>
+
+  <!-- ================= PAGE 2: DIAGRAM ================= -->
+  <section class="page" id="page-diagram">
+    <h1>Process &amp; instrumentation diagram</h1>
+    <p class="lede">Simplified P&amp;ID for the synthesis and recirculation loop. Tag numbers follow ISA-style equipment/stream convention. Values update live from the Controls page.</p>
+    <div id="diagram-wrap"></div>
+    <div class="legend" style="margin-top:14px;">
+      <div><span class="dot" style="background:#3a6088"></span>Liquid / solution line</div>
+      <div><span class="dot" style="background:#e8a33d"></span>Vapour / off-gas line</div>
+      <div><span class="dot" style="background:#5fb2d6"></span>Steam / utility line</div>
+    </div>
+  </section>
+
+  <!-- ================= PAGE 3: CONTROLS ================= -->
+  <section class="page" id="page-controls">
+    <h1>Operating controls</h1>
+    <p class="lede">Set the feed and synthesis-loop parameters for this run. The reactor per-pass conversion is computed from N/C ratio, temperature, pressure and H₂O/CO₂ ratio using the simplified correlation described on the Results page.</p>
+
+    <div class="grid2">
+      <div class="panel">
+        <h2>Feed &amp; capacity</h2>
+
+        <div class="ctrl-row">
+          <label>Target production capacity <span class="val" id="v-capacity">1725 t/day</span></label>
+          <input type="range" id="in-capacity" min="300" max="3250" step="25" value="1725">
+          <div class="ctrl-note">Sets fresh NH₃ / CO₂ feed required to hit this urea output.</div>
+        </div>
+
+        <div class="ctrl-row">
+          <label>N/C molar ratio (NH₃ : CO₂, fresh feed) <span class="val" id="v-nc">3.00</span></label>
+          <input type="range" id="in-nc" min="2.50" max="4.20" step="0.05" value="3.00">
+          <div class="ctrl-note">Typical industrial range 2.8 – 3.5. Higher ratios raise conversion but raise NH₃ recycle duty.</div>
+        </div>
+
+        <div class="ctrl-row">
+          <label>H₂O / CO₂ molar ratio (recycle solution) <span class="val" id="v-h2o">0.60</span></label>
+          <input type="range" id="in-h2o" min="0.20" max="1.20" step="0.02" value="0.60">
+          <div class="ctrl-note">Water carried back with the recycled carbamate solution. Conversion falls as this rises.</div>
+        </div>
+
+        <div class="ctrl-row">
+          <label>Recycle recovery efficiency <span class="val" id="v-recyc">98.5 %</span></label>
+          <input type="range" id="in-recyc" min="90" max="99.5" step="0.1" value="98.5">
+          <div class="ctrl-note">Fraction of unconverted carbamate successfully returned to the reactor (rest purged/vented).</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Reactor conditions</h2>
+
+        <div class="ctrl-row">
+          <label>Reactor temperature <span class="val" id="v-temp">185 °C</span></label>
+          <input type="range" id="in-temp" min="170" max="200" step="1" value="185">
+        </div>
+
+        <div class="ctrl-row">
+          <label>Reactor pressure <span class="val" id="v-pres">150 bar</span></label>
+          <input type="range" id="in-pres" min="130" max="200" step="1" value="150">
+        </div>
+
+        <div class="ctrl-row">
+          <label>Residence time <span class="val" id="v-res">35 min</span></label>
+          <input type="range" id="in-res" min="20" max="50" step="1" value="35">
+          <div class="ctrl-note">Used for reactor volume estimate on the Results page.</div>
+        </div>
+
+        <div class="ctrl-row">
+          <label>Steam intensity <span class="val" id="v-steam">0.95 t/t</span></label>
+          <input type="range" id="in-steam" min="0.70" max="1.30" step="0.01" value="0.95">
+          <div class="ctrl-note">LP steam consumed per tonne of urea (evaporation + decomposition duty).</div>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr); margin-top:8px;">
+          <div class="kpi">
+            <div class="label">Per-pass conversion</div>
+            <div class="value" id="k-perpass">–</div>
+            <div class="unit">mol CO₂ → urea, single pass</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Overall CO₂ utilisation</div>
+            <div class="value" id="k-overall">–</div>
+            <div class="unit">fresh CO₂ to product, incl. recycle</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi"><div class="label">NH₃ fresh feed</div><div class="value" id="k-nh3">–</div><div class="unit">t/h</div></div>
+      <div class="kpi"><div class="label">CO₂ fresh feed</div><div class="value" id="k-co2">–</div><div class="unit">t/h</div></div>
+      <div class="kpi"><div class="label">Urea product</div><div class="value" id="k-urea">–</div><div class="unit">t/h</div></div>
+      <div class="kpi"><div class="label">Reactor loop flow</div><div class="value" id="k-loop">–</div><div class="unit">t/h, incl. recycle</div></div>
+    </div>
+  </section>
+
+  <!-- ================= PAGE 4: RESULTS ================= -->
+  <section class="page" id="page-results">
+    <h1>Simulation results</h1>
+    <p class="lede">Steady-state mass balance and design summary for the operating point set on the Controls page.</p>
+
+    <div class="tabgroup-title">
+      <h2 style="margin:0;">Guided tour of the process</h2>
+      <span class="badge" id="resultBadge">1725 t/day</span>
+    </div>
+    <div class="panel" id="guidedTour" style="margin-bottom:26px;"></div>
+
+    <h2>Stream table</h2>
+    <div class="panel" style="margin-bottom:26px; overflow-x:auto;">
+      <table id="streamTable">
+        <thead><tr><th>Stream</th><th>Description</th><th>Phase</th><th>T (°C)</th><th>P (bar)</th><th>Flow (t/h)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <h2>Equipment list &amp; design basis</h2>
+    <div class="panel" style="margin-bottom:26px; overflow-x:auto;">
+      <table id="equipTable">
+        <thead><tr><th>Tag</th><th>Equipment</th><th>Design basis</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="grid2">
+      <div class="panel">
+        <h2>Product &amp; utility summary</h2>
+        <table id="utilTable"><tbody></tbody></table>
+      </div>
+      <div class="panel">
+        <h2>Model assumptions</h2>
+        <ul class="assump-list">
+          <li>Per-pass reactor conversion is an illustrative correlation fitted to typical published trends for N/C ratio, H₂O/CO₂ ratio and temperature — it is not licensed kinetics data from any process technology provider.</li>
+          <li>The recirculation section is lumped into a single recycle stream rather than modelled as sequential HP/LP decomposition stages.</li>
+          <li>No rigorous VLE or activity-coefficient thermodynamic package is used; stream temperatures/pressures reflect typical industrial values for a CO₂-stripping train.</li>
+          <li>Steady-state, single-train basis; start-up, shutdown and off-spec transients are excluded.</li>
+          <li>Utility consumption (steam, power, cooling water) is scaled from order-of-magnitude industry benchmarks per tonne of urea, not equipment-specific duty calculations.</li>
+          <li>Equipment sizing (reactor volume) is order-of-magnitude only, from residence time and an assumed loop-fluid density.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>Educational process model · not a licensed plant design · figures are illustrative</footer>
+
+<script>
+/* ============================================================
+   STATE
+   ============================================================ */
+const state = {
+  capacity: 1725,   // t/day urea
+  ncRatio: 3.00,
+  h2oCO2: 0.60,
+  recycleEff: 0.985,
+  reactorT: 185,
+  reactorP: 150,
+  resTime: 35,      // min
+  steamInt: 0.95,   // t steam / t urea
+};
+
+const M = { NH3: 17.03, CO2: 44.01, UREA: 60.06, H2O: 18.02 };
+
+function clamp(v,lo,hi){ return Math.min(hi, Math.max(lo, v)); }
+
+function perPassConversion(s){
+  let x = 0.64;
+  x += (s.ncRatio - 3.00) * 0.045;
+  x += (s.reactorT - 185) * 0.0028;
+  x -= (s.h2oCO2 - 0.60) * 0.065;
+  x += (s.reactorP - 150) * 0.00035;
+  return clamp(x, 0.45, 0.80);
+}
+
+function computeBalance(s){
+  const x = perPassConversion(s);
+  const overall = clamp(1 - (1 - x) * (1 - s.recycleEff), x, 0.995);
+
+  const molUreaDay = (s.capacity * 1e6) / M.UREA;          // mol/day
+  const molCO2Fresh = molUreaDay / overall;                 // mol/day
+  const molNH3Fresh = s.ncRatio * molCO2Fresh;               // mol/day
+  const molCO2Loop  = molUreaDay / x;                        // mol/day total CO2 through reactor
+  const molCO2Recycle = Math.max(0, molCO2Loop - molCO2Fresh);
+  const molNH3Loop = s.ncRatio * molCO2Loop;
+  const molNH3Recycle = Math.max(0, molNH3Loop - molNH3Fresh);
+  const molH2ORecycle = s.h2oCO2 * molCO2Recycle;
+  const molH2OProduct = molUreaDay; // 1:1 byproduct water formed
+
+  const t = (mol, mw) => (mol * mw) / 1e6; // mol/day * g/mol -> t/day
+
+  const dayToHr = v => v / 24;
+
+  const nh3FreshTPD = t(molNH3Fresh, M.NH3);
+  const co2FreshTPD = t(molCO2Fresh, M.CO2);
+  const ureaTPD = s.capacity;
+  const nh3RecycleTPD = t(molNH3Recycle, M.NH3);
+  const co2RecycleTPD = t(molCO2Recycle, M.CO2);
+  const h2oRecycleTPD = t(molH2ORecycle, M.H2O);
+  const h2oProductTPD = t(molH2OProduct, M.H2O);
+
+  const loopFeedTPD = nh3FreshTPD + co2FreshTPD + nh3RecycleTPD + co2RecycleTPD + h2oRecycleTPD;
+
+  // rough reactor volume: loop mass flow / assumed density -> volumetric flow * residence time
+  const density = 1150; // kg/m3, approx liquid carbamate/urea melt at reactor conditions
+  const massFlowKgMin = (loopFeedTPD * 1000) / (24*60);
+  const volFlowM3Min = massFlowKgMin / density;
+  const reactorVolume = volFlowM3Min * s.resTime; // m3
+
+  const steamTPD = s.capacity * s.steamInt;
+  const coolingWaterM3H = (s.capacity * 80) / 24;
+  const powerMW = (s.capacity * 32) / 24 / 1000;
+
+  return {
+    x, overall,
+    nh3FreshTPD, co2FreshTPD, ureaTPD, nh3RecycleTPD, co2RecycleTPD, h2oRecycleTPD, h2oProductTPD,
+    loopFeedTPD, reactorVolume, steamTPD, coolingWaterM3H, powerMW,
+    dayToHr
+  };
+}
+
+/* ============================================================
+   CONTROLS PAGE WIRING
+   ============================================================ */
+const ctrl = {
+  capacity: document.getElementById('in-capacity'),
+  nc: document.getElementById('in-nc'),
+  h2o: document.getElementById('in-h2o'),
+  recyc: document.getElementById('in-recyc'),
+  temp: document.getElementById('in-temp'),
+  pres: document.getElementById('in-pres'),
+  res: document.getElementById('in-res'),
+  steam: document.getElementById('in-steam'),
+};
+const disp = {
+  capacity: document.getElementById('v-capacity'),
+  nc: document.getElementById('v-nc'),
+  h2o: document.getElementById('v-h2o'),
+  recyc: document.getElementById('v-recyc'),
+  temp: document.getElementById('v-temp'),
+  pres: document.getElementById('v-pres'),
+  res: document.getElementById('v-res'),
+  steam: document.getElementById('v-steam'),
+};
+
+function readControlsToState(){
+  state.capacity = parseFloat(ctrl.capacity.value);
+  state.ncRatio = parseFloat(ctrl.nc.value);
+  state.h2oCO2 = parseFloat(ctrl.h2o.value);
+  state.recycleEff = parseFloat(ctrl.recyc.value)/100;
+  state.reactorT = parseFloat(ctrl.temp.value);
+  state.reactorP = parseFloat(ctrl.pres.value);
+  state.resTime = parseFloat(ctrl.res.value);
+  state.steamInt = parseFloat(ctrl.steam.value);
+}
+
+function updateControlDisplays(){
+  disp.capacity.textContent = state.capacity.toLocaleString() + ' t/day';
+  disp.nc.textContent = state.ncRatio.toFixed(2);
+  disp.h2o.textContent = state.h2oCO2.toFixed(2);
+  disp.recyc.textContent = (state.recycleEff*100).toFixed(1) + ' %';
+  disp.temp.textContent = state.reactorT + ' °C';
+  disp.pres.textContent = state.reactorP + ' bar';
+  disp.res.textContent = state.resTime + ' min';
+  disp.steam.textContent = state.steamInt.toFixed(2) + ' t/t';
+}
+
+function refreshAll(){
+  readControlsToState();
+  updateControlDisplays();
+  const bal = computeBalance(state);
+  window._bal = bal;
+
+  document.getElementById('k-perpass').textContent = (bal.x*100).toFixed(1) + '%';
+  document.getElementById('k-overall').textContent = (bal.overall*100).toFixed(1) + '%';
+  document.getElementById('k-nh3').textContent = bal.dayToHr(bal.nh3FreshTPD).toFixed(1);
+  document.getElementById('k-co2').textContent = bal.dayToHr(bal.co2FreshTPD).toFixed(1);
+  document.getElementById('k-urea').textContent = bal.dayToHr(bal.ureaTPD).toFixed(1);
+  document.getElementById('k-loop').textContent = bal.dayToHr(bal.loopFeedTPD).toFixed(1);
+
+  updateDiagramValues(bal);
+  updateResults(bal);
+}
+
+Object.values(ctrl).forEach(el => el.addEventListener('input', refreshAll));
+
+/* ============================================================
+   NAV / TAB SWITCHING
+   ============================================================ */
+document.getElementById('mainTabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-page]');
+  if(!btn) return;
+  document.querySelectorAll('#mainTabs button').forEach(b=>b.classList.toggle('active', b===btn));
+  document.querySelectorAll('section.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+btn.dataset.page).classList.add('active');
+  if(btn.dataset.page === 'plant'){ onPlantShown(); }
+});
+
+/* ============================================================
+   DIAGRAM (SVG P&ID)
+   ============================================================ */
+const diagramEquip = [
+  {tag:'TK-101', name:'NH₃ storage', x:20, y:220, w:90, h:60, cls:'feed'},
+  {tag:'K-101',  name:'CO₂ compressor', x:20, y:320, w:90, h:50, cls:'feed'},
+  {tag:'R-101',  name:'Urea reactor', x:200, y:180, w:100, h:140, cls:'reaction'},
+  {tag:'E-101',  name:'HP stripper', x:360, y:180, w:80, h:140, cls:'reaction'},
+  {tag:'E-102',  name:'HP carbamate condenser', x:500, y:200, w:110, h:60, cls:'reaction'},
+  {tag:'D-201',  name:'LP decomposer', x:660, y:220, w:90, h:100, cls:'reaction'},
+  {tag:'V-201',  name:'Evaporator I', x:800, y:180, w:90, h:80, cls:'finishing'},
+  {tag:'V-202',  name:'Evaporator II', x:800, y:290, w:90, h:80, cls:'finishing'},
+  {tag:'PT-101', name:'Prilling tower', x:950, y:120, w:90, h:200, cls:'finishing'},
+];
+const diagramStreams = [
+  {id:'101', from:[65,220], to:[200,240], label:'NH₃ feed', kind:'liquid'},
+  {id:'102', from:[65,320], to:[200,300], label:'CO₂ feed', kind:'vapor'},
+  {id:'104', from:[300,240], to:[360,240], label:'reactor effluent', kind:'liquid'},
+  {id:'105', from:[440,220], to:[500,220], label:'stripper off-gas', kind:'vapor'},
+  {id:'103', from:[500,250], to:[300,260], label:'recycle carbamate', kind:'liquid', curveUp:true},
+  {id:'106', from:[610,230], to:[660,260], label:'stripped solution', kind:'liquid'},
+  {id:'201', from:[750,260], to:[800,220], label:'urea solution', kind:'liquid'},
+  {id:'202', from:[845,260], to:[845,290], label:'to evap II', kind:'liquid'},
+  {id:'301', from:[890,320], to:[950,220], label:'urea melt', kind:'liquid'},
+];
+
+function buildDiagram(){
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS,'svg');
+  svg.setAttribute('viewBox','0 0 1100 420');
+  svg.setAttribute('width','100%');
+  svg.setAttribute('height','420');
+
+  // grid pattern
+  const defs = document.createElementNS(svgNS,'defs');
+  const arrow = document.createElementNS(svgNS,'marker');
+  arrow.setAttribute('id','arrowhead'); arrow.setAttribute('markerWidth','8'); arrow.setAttribute('markerHeight','8');
+  arrow.setAttribute('refX','6'); arrow.setAttribute('refY','3'); arrow.setAttribute('orient','auto');
+  const arrowPath = document.createElementNS(svgNS,'path');
+  arrowPath.setAttribute('d','M0,0 L6,3 L0,6 Z'); arrowPath.setAttribute('fill','#3a6088');
+  arrow.appendChild(arrowPath); defs.appendChild(arrow); svg.appendChild(defs);
+
+  diagramStreams.forEach(s=>{
+    const path = document.createElementNS(svgNS,'path');
+    const [x1,y1] = s.from, [x2,y2] = s.to;
+    let d;
+    if(s.curveUp){
+      d = `M${x1},${y1} C${(x1+x2)/2},${y1-60} ${(x1+x2)/2},${y2-60} ${x2},${y2}`;
+    } else {
+      const midx = (x1+x2)/2;
+      d = `M${x1},${y1} L${midx},${y1} L${midx},${y2} L${x2},${y2}`;
+    }
+    path.setAttribute('d', d);
+    path.setAttribute('class', 'pid-line' + (s.kind==='vapor' ? ' vapor':''));
+    path.setAttribute('marker-end','url(#arrowhead)');
+    svg.appendChild(path);
+
+    const label = document.createElementNS(svgNS,'text');
+    label.setAttribute('x', (x1+x2)/2);
+    label.setAttribute('y', Math.min(y1,y2) - 6 + (s.curveUp ? -34 : 0));
+    label.setAttribute('class','pid-stream');
+    label.setAttribute('text-anchor','middle');
+    label.textContent = s.id;
+    svg.appendChild(label);
+
+    const valLabel = document.createElementNS(svgNS,'text');
+    valLabel.setAttribute('id', 'stream-val-'+s.id);
+    valLabel.setAttribute('x', (x1+x2)/2);
+    valLabel.setAttribute('y', Math.min(y1,y2) + 8 + (s.curveUp ? -34 : 0));
+    valLabel.setAttribute('class','pid-val');
+    valLabel.setAttribute('text-anchor','middle');
+    valLabel.textContent = '– t/h';
+    svg.appendChild(valLabel);
+  });
+
+  diagramEquip.forEach(e=>{
+    const rect = document.createElementNS(svgNS,'rect');
+    rect.setAttribute('x', e.x); rect.setAttribute('y', e.y);
+    rect.setAttribute('width', e.w); rect.setAttribute('height', e.h);
+    rect.setAttribute('rx', 6);
+    rect.setAttribute('class', 'pid-box ' + e.cls);
+    svg.appendChild(rect);
+
+    const tag = document.createElementNS(svgNS,'text');
+    tag.setAttribute('x', e.x + e.w/2); tag.setAttribute('y', e.y + 20);
+    tag.setAttribute('class','pid-tag'); tag.setAttribute('text-anchor','middle');
+    tag.textContent = e.tag;
+    svg.appendChild(tag);
+
+    const name = document.createElementNS(svgNS,'text');
+    name.setAttribute('x', e.x + e.w/2); name.setAttribute('y', e.y + 36);
+    name.setAttribute('class','pid-name'); name.setAttribute('text-anchor','middle');
+    const words = e.name.split(' ');
+    name.textContent = e.name.length > 14 ? words.slice(0,Math.ceil(words.length/2)).join(' ') : e.name;
+    svg.appendChild(name);
+    if(e.name.length > 14){
+      const name2 = document.createElementNS(svgNS,'text');
+      name2.setAttribute('x', e.x + e.w/2); name2.setAttribute('y', e.y + 50);
+      name2.setAttribute('class','pid-name'); name2.setAttribute('text-anchor','middle');
+      name2.textContent = words.slice(Math.ceil(words.length/2)).join(' ');
+      svg.appendChild(name2);
+    }
+  });
+
+  document.getElementById('diagram-wrap').appendChild(svg);
+}
+buildDiagram();
+
+function updateDiagramValues(bal){
+  const hr = bal.dayToHr;
+  const set = (id, val) => { const el = document.getElementById('stream-val-'+id); if(el) el.textContent = val.toFixed(1)+' t/h'; };
+  set('101', hr(bal.nh3FreshTPD));
+  set('102', hr(bal.co2FreshTPD));
+  set('104', hr(bal.nh3FreshTPD + bal.co2FreshTPD + bal.nh3RecycleTPD + bal.co2RecycleTPD));
+  set('105', hr(bal.co2RecycleTPD + bal.nh3RecycleTPD*0.3));
+  set('103', hr(bal.co2RecycleTPD + bal.nh3RecycleTPD + bal.h2oRecycleTPD));
+  set('106', hr(bal.ureaTPD + bal.h2oProductTPD));
+  set('201', hr(bal.ureaTPD + bal.h2oProductTPD*0.3));
+  set('202', hr(bal.ureaTPD + bal.h2oProductTPD*0.1));
+  set('301', hr(bal.ureaTPD));
+}
+
+/* ============================================================
+   RESULTS PAGE
+   ============================================================ */
+const tourSteps = [
+  {t:'Feed compression & pumping', d:'Fresh liquid ammonia (TK-101) is pumped to reactor pressure and preheated; fresh CO₂ gas is compressed in K-101 to reactor pressure. Streams 101 / 102.'},
+  {t:'High-pressure synthesis', d:'NH₃, CO₂ and recycled carbamate solution (stream 103) enter reactor R-101, where CO₂ and NH₃ first form ammonium carbamate, which partially dehydrates to urea and water at the set temperature and pressure.'},
+  {t:'CO₂ stripping', d:'Reactor effluent (stream 104) passes to stripper E-101, where fresh CO₂ feed strips unreacted ammonia and carbamate out of the liquid, reducing the load on the low-pressure recirculation stages.'},
+  {t:'Carbamate condensation & recycle', d:'Stripper off-gas (stream 105) is condensed in E-102, reforming carbamate solution that is recycled to the reactor (stream 103) — this is the main recycle loop set by the recycle recovery efficiency control.'},
+  {t:'Low-pressure decomposition', d:'The stripped urea solution (stream 106) is let down to D-201, where remaining carbamate is decomposed and separated at lower pressure, returning further NH₃/CO₂ to recovery.'},
+  {t:'Vacuum concentration', d:'The dilute urea solution (stream 201) is concentrated in two vacuum evaporator stages (V-201, V-202), removing byproduct water to reach a urea melt of about 99.6–99.8% purity.'},
+  {t:'Prilling', d:'Urea melt (stream 301) is sprayed from the top of prilling tower PT-101 and solidifies into prills as it falls through a countercurrent air stream, yielding the solid product.'},
+];
+
+function updateResults(bal){
+  document.getElementById('resultBadge').textContent = state.capacity.toLocaleString() + ' t/day';
+
+  // guided tour
+  const tourEl = document.getElementById('guidedTour');
+  tourEl.innerHTML = tourSteps.map((s,i)=>`
+    <div class="tour-step">
+      <div class="tour-num">${String(i+1).padStart(2,'0')}</div>
+      <div class="tour-body"><h4>${s.t}</h4><p>${s.d}</p></div>
+    </div>`).join('');
+
+  const hr = bal.dayToHr;
+  const streamRows = [
+    ['101','NH₃ fresh feed','liquid', 90, state.reactorP+10, hr(bal.nh3FreshTPD)],
+    ['102','CO₂ fresh feed','vapour', 120, state.reactorP+5, hr(bal.co2FreshTPD)],
+    ['103','Recycled carbamate solution','liquid', 168, state.reactorP, hr(bal.co2RecycleTPD+bal.nh3RecycleTPD+bal.h2oRecycleTPD)],
+    ['104','Reactor effluent','liquid', state.reactorT, state.reactorP, hr(bal.nh3FreshTPD+bal.co2FreshTPD+bal.nh3RecycleTPD+bal.co2RecycleTPD)],
+    ['105','Stripper off-gas','vapour', state.reactorT-20, state.reactorP-5, hr(bal.co2RecycleTPD+bal.nh3RecycleTPD*0.3)],
+    ['106','Stripped urea solution','liquid', 130, 18, hr(bal.ureaTPD+bal.h2oProductTPD)],
+    ['201','Dilute urea solution to evaporation','liquid', 130, 0.3, hr(bal.ureaTPD+bal.h2oProductTPD*0.3)],
+    ['301','Urea melt to prilling','liquid', 138, 1, hr(bal.ureaTPD)],
+    ['302','Urea prill product','solid', 50, 1, hr(bal.ureaTPD)],
+  ];
+  const streamBody = document.querySelector('#streamTable tbody');
+  streamBody.innerHTML = streamRows.map(r=>`
+    <tr><td class="name">${r[0]}</td><td class="name">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5].toFixed(1)}</td></tr>
+  `).join('');
+
+  const equipRows = [
+    ['R-101','Urea reactor', `${bal.reactorVolume.toFixed(0)} m³ est. volume · ${state.resTime} min residence · ${state.reactorT} °C / ${state.reactorP} bar`],
+    ['E-101','HP CO₂ stripper', 'Falling-film type, reactor pressure, fresh CO₂ as stripping medium'],
+    ['E-102','HP carbamate condenser', 'Recovers heat of condensation as LP steam; condenses recycle carbamate'],
+    ['D-201','LP decomposer', '~18 bar, secondary carbamate decomposition'],
+    ['V-201 / V-202','Vacuum evaporators (2-stage)', 'Concentrates urea solution from ~75% to ~99.7% melt'],
+    ['PT-101','Prilling tower', 'Countercurrent air-cooled, gravity prilling, ~50–60 m typical height'],
+  ];
+  document.querySelector('#equipTable tbody').innerHTML = equipRows.map(r=>`
+    <tr><td class="name">${r[0]}</td><td class="name">${r[1]}</td><td>${r[2]}</td></tr>
+  `).join('');
+
+  const utilRows = [
+    ['Urea product', hr(bal.ureaTPD).toFixed(1)+' t/h'],
+    ['Per-pass CO₂ conversion', (bal.x*100).toFixed(1)+' %'],
+    ['Overall CO₂ utilisation', (bal.overall*100).toFixed(1)+' %'],
+    ['LP steam consumption', bal.steamTPD.toFixed(0)+' t/day'],
+    ['Cooling water', bal.coolingWaterM3H.toFixed(0)+' m³/h'],
+    ['Installed power (approx.)', bal.powerMW.toFixed(1)+' MW'],
+    ['Reactor volume (est.)', bal.reactorVolume.toFixed(0)+' m³'],
+  ];
+  document.querySelector('#utilTable tbody').innerHTML = utilRows.map(r=>`
+    <tr><td class="name">${r[0]}</td><td style="text-align:right;">${r[1]}</td></tr>
+  `).join('');
+}
+
+/* ============================================================
+   3D PLANT SCENE (three.js)
+   ============================================================ */
+let scene, camera, renderer, raycaster, mouse;
+let equipMeshes = [];
+let cameraTarget = new THREE.Vector3(10,6,0);
+let sphericalRadius = 70, sphericalTheta = 0.9, sphericalPhi = 1.1;
+let isDragging = false, lastX=0, lastY=0;
+let plantInitialised = false;
+
+const equipDefs = [
+  {tag:'TK-101', name:'Ammonia storage tank', desc:'Cryogenic/pressurised liquid NH₃ storage feeding the HP pumps.', group:'feed', x:-42, z:6, type:'tank'},
+  {tag:'K-101', name:'CO₂ compressor', desc:'Multi-stage centrifugal compressor raising CO₂ to reactor pressure.', group:'feed', x:-42, z:-8, type:'compressor'},
+  {tag:'P-101', name:'NH₃ HP feed pump', desc:'Raises liquid ammonia to synthesis loop pressure.', group:'feed', x:-30, z:6, type:'pump'},
+  {tag:'R-101', name:'Urea reactor', desc:'High-pressure vessel where carbamate forms and partially dehydrates to urea.', group:'process', x:-14, z:0, type:'tower', h:20, r:3.4},
+  {tag:'E-101', name:'HP stripper', desc:'Falling-film stripper; fresh CO₂ strips NH₃/carbamate from reactor effluent.', group:'process', x:-3, z:0, type:'tower', h:17, r:2.8},
+  {tag:'E-102', name:'HP carbamate condenser', desc:'Condenses stripper off-gas back to carbamate solution for recycle.', group:'process', x:8, z:0, type:'horiz'},
+  {tag:'D-201', name:'LP decomposer', desc:'Secondary decomposition of remaining carbamate at reduced pressure.', group:'process', x:18, z:0, type:'tower', h:12, r:2.2},
+  {tag:'V-201', name:'Evaporator I', desc:'First-stage vacuum evaporator, concentrates urea solution.', group:'process', x:28, z:-4, type:'vessel'},
+  {tag:'V-202', name:'Evaporator II', desc:'Second-stage vacuum evaporator, produces urea melt ~99.7%.', group:'process', x:28, z:4, type:'vessel'},
+  {tag:'PT-101', name:'Prilling tower', desc:'Melt is sprayed and solidifies into prills falling through cooling air.', group:'process', x:44, z:0, type:'prill', h:38, r:5},
+];
+
+function makeLabelSprite(text, color){
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(10,20,30,0.75)';
+  ctx.fillRect(0,0,256,64);
+  ctx.strokeStyle = color; ctx.lineWidth = 3;
+  ctx.strokeRect(1.5,1.5,253,61);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '600 30px monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, 128, 32);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false});
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(9,2.3,1);
+  return sprite;
+}
+
+function groupColor(group){ return group==='feed' ? 0x4fb286 : 0xe8a33d; }
+
+function buildEquipment(){
+  equipDefs.forEach(def=>{
+    const color = groupColor(def.group);
+    const mat = new THREE.MeshStandardMaterial({color, metalness:0.35, roughness:0.5});
+    const matDark = new THREE.MeshStandardMaterial({color:0x1c3348, metalness:0.4, roughness:0.6});
+    let mesh;
+    const g = new THREE.Group();
+
+    if(def.type==='tower'){
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(def.r, def.r, def.h, 20), mat);
+      body.position.y = def.h/2;
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(def.r, 20, 12, 0, Math.PI*2, 0, Math.PI/2), mat);
+      cap.position.y = def.h;
+      g.add(body, cap);
+      mesh = body;
+    } else if(def.type==='horiz'){
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 10, 18), mat);
+      body.rotation.z = Math.PI/2;
+      body.position.y = 5;
+      g.add(body);
+      const legA = new THREE.Mesh(new THREE.BoxGeometry(0.6,5,0.6), matDark);
+      legA.position.set(-3,2.5,0); const legB = legA.clone(); legB.position.x = 3;
+      g.add(legA, legB);
+      mesh = body;
+    } else if(def.type==='vessel'){
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 9, 18), mat);
+      body.position.y = 6;
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(2.6, 3, 18), matDark);
+      cone.position.y = 1;
+      g.add(body, cone);
+      mesh = body;
+    } else if(def.type==='tank'){
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, 8, 20), mat);
+      body.position.y = 4;
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(3.4, 20, 12, 0,Math.PI*2,0,Math.PI/2), mat);
+      cap.position.y = 8;
+      g.add(body, cap);
+      mesh = body;
+    } else if(def.type==='compressor'){
+      const body = new THREE.Mesh(new THREE.BoxGeometry(6,4,4), mat);
+      body.position.y = 2;
+      g.add(body);
+      mesh = body;
+    } else if(def.type==='pump'){
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.1,2.4,14), mat);
+      body.rotation.z = Math.PI/2; body.position.y = 1.2;
+      g.add(body);
+      mesh = body;
+    } else if(def.type==='prill'){
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(def.r*0.55, def.r, def.h, 22), mat);
+      body.position.y = def.h/2;
+      g.add(body);
+      mesh = body;
+    }
+
+    g.position.set(def.x, 0, def.z);
+    const label = makeLabelSprite(def.tag, def.group==='feed' ? '#4fb286' : '#e8a33d');
+    label.position.set(0, (def.h||9)+3, 0);
+    g.add(label);
+
+    g.userData = def;
+    scene.add(g);
+    equipMeshes.push(g);
+  });
+
+  // ground grid
+  const grid = new THREE.GridHelper(140, 28, 0x2a4a66, 0x1a3149);
+  grid.position.y = 0;
+  scene.add(grid);
+
+  // connecting pipes (sequential along x)
+  const ordered = equipDefs.filter(d=>d.group==='process');
+  for(let i=0;i<ordered.length-1;i++){
+    addPipe(ordered[i], ordered[i+1]);
+  }
+  addPipe(equipDefs[2], equipDefs[3]); // pump -> reactor
+  addPipe(equipDefs[1], equipDefs[3]); // compressor -> reactor
+}
+
+function addPipe(a,b){
+  const start = new THREE.Vector3(a.x, 2.5, a.z);
+  const end = new THREE.Vector3(b.x, 2.5, b.z);
+  const dir = new THREE.Vector3().subVectors(end,start);
+  const len = dir.length();
+  const geo = new THREE.CylinderGeometry(0.35,0.35,len,10);
+  const mat = new THREE.MeshStandardMaterial({color:0x3a6088, metalness:0.5, roughness:0.4});
+  const pipe = new THREE.Mesh(geo, mat);
+  pipe.position.copy(start).addScaledVector(dir,0.5);
+  pipe.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize());
+  scene.add(pipe);
+}
+
+function initPlant(){
+  const wrap = document.getElementById('plant-canvas-wrap');
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(45, wrap.clientWidth/wrap.clientHeight, 0.1, 1000);
+
+  renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+  wrap.insertBefore(renderer.domElement, wrap.firstChild);
+
+  scene.add(new THREE.AmbientLight(0x8fa7bb, 0.7));
+  const dir1 = new THREE.DirectionalLight(0xffffff, 0.9);
+  dir1.position.set(40,60,20);
+  scene.add(dir1);
+  const dir2 = new THREE.DirectionalLight(0x5fb2d6, 0.3);
+  dir2.position.set(-30,20,-30);
+  scene.add(dir2);
+
+  buildEquipment();
+  updateCamera();
+
+  raycaster = new THREE.Raycaster();
+  mouse = new THREE.Vector2();
+
+  const dom = renderer.domElement;
+  dom.addEventListener('mousedown', e=>{ isDragging=true; lastX=e.clientX; lastY=e.clientY; });
+  window.addEventListener('mouseup', ()=> isDragging=false);
+  window.addEventListener('mousemove', e=>{
+    if(isDragging){
+      const dx = e.clientX-lastX, dy = e.clientY-lastY;
+      sphericalTheta -= dx*0.006;
+      sphericalPhi = clamp(sphericalPhi - dy*0.006, 0.25, 1.5);
+      lastX=e.clientX; lastY=e.clientY;
+      updateCamera();
+    }
+    handleHover(e);
+  });
+  dom.addEventListener('wheel', e=>{
+    e.preventDefault();
+    sphericalRadius = clamp(sphericalRadius + e.deltaY*0.05, 20, 160);
+    updateCamera();
+  }, {passive:false});
+
+  // touch support
+  dom.addEventListener('touchstart', e=>{ isDragging=true; lastX=e.touches[0].clientX; lastY=e.touches[0].clientY; }, {passive:true});
+  window.addEventListener('touchend', ()=> isDragging=false);
+  window.addEventListener('touchmove', e=>{
+    if(isDragging && e.touches.length===1){
+      const dx = e.touches[0].clientX-lastX, dy = e.touches[0].clientY-lastY;
+      sphericalTheta -= dx*0.006;
+      sphericalPhi = clamp(sphericalPhi - dy*0.006, 0.25, 1.5);
+      lastX=e.touches[0].clientX; lastY=e.touches[0].clientY;
+      updateCamera();
+    }
+  }, {passive:true});
+
+  dom.addEventListener('click', handleClick);
+
+  window.addEventListener('resize', onResize);
+  animate();
+  plantInitialised = true;
+}
+
+function updateCamera(){
+  const x = cameraTarget.x + sphericalRadius * Math.sin(sphericalPhi) * Math.cos(sphericalTheta);
+  const y = cameraTarget.y + sphericalRadius * Math.cos(sphericalPhi);
+  const z = cameraTarget.z + sphericalRadius * Math.sin(sphericalPhi) * Math.sin(sphericalTheta);
+  camera.position.set(x,y,z);
+  camera.lookAt(cameraTarget);
+}
+
+function onResize(){
+  const wrap = document.getElementById('plant-canvas-wrap');
+  if(!wrap || !renderer) return;
+  camera.aspect = wrap.clientWidth/wrap.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(renderer) renderer.render(scene, camera);
+}
+
+function handleHover(e){
+  const wrap = document.getElementById('plant-canvas-wrap');
+  const rect = wrap.getBoundingClientRect();
+  mouse.x = ((e.clientX-rect.left)/rect.width)*2-1;
+  mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(equipMeshes, true);
+  const tooltip = document.getElementById('equip-tooltip');
+  if(hits.length){
+    let obj = hits[0].object;
+    while(obj && !obj.userData.tag) obj = obj.parent;
+    if(obj){
+      tooltip.style.display='block';
+      tooltip.style.left = (e.clientX-rect.left+14)+'px';
+      tooltip.style.top = (e.clientY-rect.top+14)+'px';
+      tooltip.innerHTML = `<div class="tt-tag">${obj.userData.tag}</div><div class="tt-name">${obj.userData.name}</div><div class="tt-desc">${obj.userData.desc}</div>`;
+    }
+  } else {
+    tooltip.style.display='none';
+  }
+}
+
+function handleClick(){
+  // clicking simply keeps tooltip; reserved for future equipment drill-down
+}
+
+/* subtab view switching (Overview / Feed / Main process) */
+const viewInfoContent = {
+  overview: {eyebrow:'OVERVIEW', title:'Full synthesis train', body:'A single CO₂-stripping urea train, laid out left to right in process order: ammonia and carbon dioxide feed, high-pressure synthesis loop, recirculation/decomposition, vacuum concentration, and prilling.'},
+  feed: {eyebrow:'FEED SECTION', title:'Ammonia & CO₂ feed', body:'Liquid ammonia from storage (TK-101) is pumped to synthesis pressure by P-101; carbon dioxide is compressed in K-101. Both streams enter the reactor and stripper at the pressure set on the Controls page.'},
+  process: {eyebrow:'MAIN PROCESS', title:'Synthesis, recirculation & finishing', body:'Reactor R-101, stripper E-101 and condenser E-102 form the high-pressure synthesis loop; D-201 handles secondary decomposition; V-201/V-202 concentrate the solution to melt; PT-101 forms the finished prill product.'},
+};
+
+document.getElementById('plantSubtabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button[data-view]');
+  if(!btn) return;
+  document.querySelectorAll('#plantSubtabs button').forEach(b=>b.classList.toggle('active', b===btn));
+  const view = btn.dataset.view;
+  const info = viewInfoContent[view];
+  document.getElementById('viewInfo').innerHTML = `<div class="eyebrow">${info.eyebrow}</div><h3>${info.title}</h3><p>${info.body}</p>`;
+
+  if(view==='overview'){ cameraTarget.set(10,6,0); sphericalRadius=70; sphericalTheta=0.9; sphericalPhi=1.1; }
+  if(view==='feed'){ cameraTarget.set(-38,4,0); sphericalRadius=32; sphericalTheta=0.8; sphericalPhi=1.15; }
+  if(view==='process'){ cameraTarget.set(15,8,0); sphericalRadius=55; sphericalTheta=1.0; sphericalPhi=1.05; }
+  if(plantInitialised) updateCamera();
+});
+
+function onPlantShown(){
+  if(!plantInitialised){ initPlant(); }
+  else { onResize(); }
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+refreshAll();
+onPlantShown();
+</script>
+</body>
+</html>
